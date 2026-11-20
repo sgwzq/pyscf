@@ -6688,9 +6688,11 @@ class KRADCEE(KRADCBase):
             norm.
 
         Examples:
+            Set two singles amplitudes in the first root (column zero).
+            With all doubles zero, the singlet norm is the Euclidean norm.
+
             >>> import numpy as np
             >>> from pyscf.pbc import gto, scf
-            >>> from pyscf.pbc.adc import kadc_rhf
             >>> from pyscf.pbc.adc.kadc_rhf import KRADCEE
             >>> cell = gto.M(
             ...     atom='He 0 0 0',
@@ -6700,31 +6702,35 @@ class KRADCEE(KRADCBase):
             >>> kmf = scf.KRHF(
             ...     cell, cell.make_kpts([1, 1, 2]),
             ...     exxdiv=None).density_fit().run()
-            >>> mykradcee = kadc_rhf.KRADCEE(kmf)
+            >>> mykradcee = KRADCEE(kmf)
             >>> vectors = np.zeros((mykradcee.vector_size(), 1))
-            >>> vectors[0, 0] = 2
+            >>> vectors[:2, 0] = [2.0, 1.0]
             >>> normalized = mykradcee.renormalize_eigenvectors(0, vectors)
-            >>> float(normalized[0, 0]), float(vectors[0, 0])
-            (1.0, 2.0)
+            >>> normalized[:2, 0].round(6).tolist()
+            [0.894427, 0.447214]
+            >>> vectors[:2, 0].tolist()
+            [2.0, 1.0]
+            >>> divisor = np.sqrt(2.0**2 + 1.0**2)
+            >>> np.allclose(normalized[:, 0], vectors[:, 0] / divisor)
+            True
         """
         if nroots is None:
             nroots = self.nroots
         if U.shape != (self.vector_size(), nroots):
             raise ValueError(
                 'Eigenvectors must have shape (vector_size, nroots).')
-        vectors = np.array(U, dtype=np.result_type(U, float), copy=True)
-        # Include the exchanged-hole overlap in the singlet doubles norm.
-        for root in range(nroots):
-            singles = vectors[:self.n_singles, root]
-            doubles = vectors[self.n_singles:, root].reshape(
-                self.doubles_shape)
-            exchanged = doubles.transpose(1, 0, 2, 4, 3, 5, 6)
-            norm = (np.vdot(singles, singles) + np.vdot(doubles, doubles)
-                    - 0.5 * np.vdot(doubles, exchanged)).real
-            if norm <= LOOSE_ZERO_TOL:
+        # Copy in column-major order so each root is contiguous for vdot.
+        vectors = np.array(U, dtype=np.result_type(U, float), order='F')
+        for vector in vectors.T:
+            doubles = vector[self.n_singles:].reshape(self.doubles_shape)
+            # P_h exchanges (ki, i) with (kj, j) in the doubles amplitudes.
+            exchanged = doubles.swapaxes(0, 1).swapaxes(3, 4)
+            norm_sq = (np.vdot(vector, vector)
+                       - 0.5 * np.vdot(doubles, exchanged)).real
+            if norm_sq <= LOOSE_ZERO_TOL:
                 raise ValueError(
                     'Cannot normalize an EE vector with zero norm.')
-            vectors[:, root] /= np.sqrt(norm)
+            vector /= np.sqrt(norm_sq)
         return vectors
 
     def _root_properties(self, kshift, U, nroots, energies):
