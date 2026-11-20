@@ -382,9 +382,11 @@ class KRADCBase(lib.StreamObject):
     r"""Common reference, amplitudes and solver settings for periodic
     restricted ADC.
 
-    This class inherits lib.StreamObject directly. Use KRADCIP, KRADCEA or
-    KRADCEE for positive-root calculations; use KRADCBase for reference-only
-    work. The concrete Python class identifies the excitation sector.
+    As in molecular RADC, ``_scf`` holds the mean-field reference. By default
+    the ADC orbital attributes refer to the same arrays as the reference.
+    Orbital overrides and frozen natural orbital calculations can replace
+    those attributes on the ADC solver. Use KRADCIP, KRADCEA or KRADCEE for
+    excitation roots and KRADCBase for reference-only work.
 
     Args:
         mf (KRHF, Cell or KRADCBase): Periodic reference. A Cell creates a
@@ -404,6 +406,7 @@ class KRADCBase(lib.StreamObject):
         method (str): ``adc(2)``, ``adc(2)-x`` or ``adc(3)``.
         t1, t2: Singles and doubles amplitude tuples, ordered by perturbative
             order. Large doubles tensors remain backed by scratch storage.
+        scf_energy (float): Total energy from the SCF reference, in Hartree.
         e_corr (float): Reference correlation energy per primitive cell.
         E, U, P, X: Excitation energies, eigenvectors, strengths and
             spectroscopic amplitudes/transition densities; see kernel().
